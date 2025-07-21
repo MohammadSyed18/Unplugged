@@ -1,12 +1,16 @@
-# Unplugged
+# unplugged
 
-Unplugged is a mobile focus companion built around intentional sessions instead of punitive app blocking. It runs a resilient timer, records interruptions, suggests smaller sessions when completion drops, and turns session history into useful weekly patterns.
+focus timer / React Native + Expo
 
-Current state: the Expo app, local persistence, focus-state machine, interruption tracking, adaptive recommendations, weekly analytics, and unit tests are working. Notification reminders and cross-device sync are still being tested.
+- start, pause, finish, or abandon a session
+- log interruptions
+- weekly completion + distraction patterns
+- session-length suggestions from recent history, not a trained model
 
-```bash
+```sh
 npm install
 npm test
 npm start
 ```
 
+the timer, local storage, interruption tracking, recommendations, and weekly analytics are implemented. reminders and cross-device sync are still being tested.
