@@ -34,7 +34,7 @@ The timer stores a start timestamp plus accumulated time from previous runs. Pau
 
 Storage operations queue read-modify-write changes so overlapping UI events do not drop interruptions. A second active session is rejected. Disk failures are surfaced, and invalid saved data is not silently replaced with an empty history. Legacy history migrates from the original array format. Versioned archives support deduplication and reject conflicting session IDs.
 
-The repository exposes `exportArchive()` and `importArchive(raw)`; `sessionsToCsv()` supplies an escaped, spreadsheet-safe export. These are library interfaces; the mobile screens do not yet expose file pickers or sharing controls.
+The repository exposes `exportArchive()` and `importArchive(raw)`; `sessionsToCsv()` supplies an escaped, spreadsheet-safe export. The Data screen previews imports and shares JSON or CSV through the device share sheet. Imports accept pasted JSON; a native file picker is not included.
 
 ## Insights and boundaries
 
@@ -56,3 +56,9 @@ Tests cover pause/resume, app suspension, single completion, concurrent events, 
 Plans rank overdue tasks first, then priority and deadline. Breaks consume the available time; there is no trailing break. A short final fragment is absorbed when it fits, otherwise remaining work is shown explicitly. Starting a block uses the same durable focus-session engine as the main timer. Finishing or ending a linked session credits only whole focused minutes, capped at the task estimate. Reopening Plan reconciles saved history once per session ID, so recovery and repeated renders do not double-count work. Paused time earns no progress.
 
 Planning is local and deterministic. It neither syncs tasks to a server nor schedules device notifications. Task progress can be reconciled from retained session history; deleting a task removes its link from future planning.
+
+## History transfer
+
+The Data screen exports all history or the last 7/30 days, with optional redaction of intention and interruption text. JSON is suitable for backups; CSV uses spreadsheet-safe escaping. Import preview reports new records, duplicates, and any sessions outside the 1,000-record retention limit. Conflicting IDs are rejected rather than overwritten; semantic equality ignores JSON field order. Active sessions cannot be imported. The repository validates again inside its write queue, so a successful preview cannot bypass a later conflict. Archives have a five-million-character input limit. Redacted exports retain session IDs and should be shared as summaries; restoring them over an unredacted backup is deliberately a conflict.
+
+`sessionSchema.js` owns validation, `archiveTools.js` owns preview/merge/redaction, and `ArchiveScreen.js` owns the mobile controls. Device-specific share-sheet behavior still requires physical-device verification.

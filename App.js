@@ -6,6 +6,7 @@ import {sessionRepository} from "./src/store.js";
 import {durationInsights, comparePeriods} from "./src/insights.js";
 import {goalProgress, buildRoutine} from "./src/goals.js";
 
+import ArchiveScreen from "./src/ArchiveScreen.js";
 import PlannerScreen from "./src/PlannerScreen.js";
 
 const palette = {bg:"#0c0c0b", panel:"#171714", line:"#2b2b25", text:"#f2f0e8", muted:"#9b9a8e", lime:"#d7ff64", red:"#ff806f"};
@@ -67,10 +68,10 @@ export default function App() {
     <StatusBar barStyle="light-content" />
     <View style={styles.header}><Text style={styles.brand}>unplugged.</Text><Text style={styles.streak}>{stats.completed} done this week</Text></View>
     <View style={styles.tabs}>
-      {[["focus","Focus"],["plan","Plan"],["insights","Insights"]].map(([value,label]) => <TouchableOpacity key={value} onPress={()=>setTab(value)} style={[styles.tab,tab===value&&styles.tabActive]}><Text style={[styles.tabText,tab===value&&styles.tabTextActive]}>{label}</Text></TouchableOpacity>)}
+      {[["focus","Focus"],["plan","Plan"],["insights","Insights"],["data","Data"]].map(([value,label]) => <TouchableOpacity key={value} onPress={()=>setTab(value)} style={[styles.tab,tab===value&&styles.tabActive]}><Text style={[styles.tabText,tab===value&&styles.tabTextActive]}>{label}</Text></TouchableOpacity>)}
     </View>
     {error ? <Text accessibilityRole="alert" style={{color:palette.red,padding:16}}>{error}</Text> : null}
-    {!ready ? <Text style={{color:palette.muted,padding:22}}>Restoring your sessions…</Text> : tab === "plan" ? <PlannerScreen sessions={sessions} active={Boolean(active)} disabled={busy} onStart={block => {
+    {!ready ? <Text style={{color:palette.muted,padding:22}}>Restoring your sessions…</Text> : tab === "data" ? <ArchiveScreen sessions={sessions} active={active} onImported={applyState} /> : tab === "plan" ? <PlannerScreen sessions={sessions} active={Boolean(active)} disabled={busy} onStart={block => {
       if (busy || active) return;
       change(() => sessionRepository.start({...createSession({id:`session-${Date.now()}`, intention:block.title, durationMinutes:block.minutes}), taskId:block.taskId})).then(() => setTab('focus'));
     }} /> : tab === "focus" ? <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">

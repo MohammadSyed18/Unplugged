@@ -1,46 +1,11 @@
+import {decodeArchive as decode, validateSession} from './sessionSchema.js';
+import {mergeArchive, parseArchive} from './archiveTools.js';
+export {validateSession} from './sessionSchema.js';
 import {SessionStatus, transition} from './focusEngine.js';
 
 export const STORAGE_KEY = 'unplugged:state:v2';
 export const LEGACY_KEY = 'unplugged:sessions:v1';
 const terminal = new Set([SessionStatus.COMPLETED, SessionStatus.ABANDONED]);
-
-export function validateSession(value) {
-  if (!value || typeof value !== 'object' || typeof value.id !== 'string' || !value.id ||
-      typeof value.intention !== 'string' || !value.intention.trim() ||
-      !Number.isInteger(value.targetSeconds) || value.targetSeconds < 300 || value.targetSeconds > 10800 ||
-      !Number.isFinite(value.elapsedBeforeRun) || value.elapsedBeforeRun < 0 || value.elapsedBeforeRun > value.targetSeconds ||
-      !Object.values(SessionStatus).includes(value.status) || value.status === SessionStatus.IDLE ||
-      !Number.isFinite(value.createdAt) || !Array.isArray(value.interruptions)) {
-    throw new Error('Invalid saved session');
-  }
-  if (value.taskId !== undefined && (typeof value.taskId !== 'string' || !value.taskId.trim())) throw new Error('Invalid task link');
-  if (value.status === SessionStatus.COMPLETED && value.elapsedBeforeRun !== value.targetSeconds) throw new Error('Incomplete session marked completed');
-  if (value.status === SessionStatus.RUNNING && (!Number.isFinite(value.runStartedAt) || value.runStartedAt < value.createdAt)) {
-    throw new Error('Invalid running-session clock');
-  }
-  if (value.status !== SessionStatus.RUNNING && value.runStartedAt !== null) throw new Error('Inactive session has a running clock');
-  if (terminal.has(value.status) && (!Number.isFinite(value.completedAt) || value.completedAt < value.createdAt)) {
-    throw new Error('Invalid completion time');
-  }
-  for (const item of value.interruptions) {
-    if (!Number.isFinite(item.at) || item.at < value.createdAt || typeof item.reason !== 'string') throw new Error('Invalid interruption');
-  }
-  return JSON.parse(JSON.stringify(value));
-}
-
-function decode(raw) {
-  const value = JSON.parse(raw);
-  if (value.version !== 2 || !Number.isInteger(value.revision) || value.revision < 0 || !Array.isArray(value.sessions)) {
-    throw new Error('Unsupported focus archive');
-  }
-  const sessions = value.sessions.map(validateSession);
-  if (sessions.some(session => !terminal.has(session.status))) throw new Error('History contains an unfinished session');
-  const ids = new Set(sessions.map(session => session.id));
-  if (ids.size !== sessions.length) throw new Error('Duplicate saved session');
-  const active = value.active === null ? null : validateSession(value.active);
-  if (active && (terminal.has(active.status) || ids.has(active.id))) throw new Error('Invalid active session');
-  return {version: 2, revision: value.revision, sessions, active};
-}
 
 /** Serialize read-modify-write operations around an injected AsyncStorage-compatible driver. */
 export function createSessionRepository(storage, {historyLimit = 1000} = {}) {
@@ -91,15 +56,11 @@ export function createSessionRepository(storage, {historyLimit = 1000} = {}) {
     })),
     exportArchive: () => serialize(async () => JSON.stringify(await read(), null, 2)),
     importArchive: raw => serialize(async () => {
-      const imported = decode(raw);
+      const imported = parseArchive(raw);
       return mutate(state => {
         if (state.active || imported.active) throw new Error('Finish active sessions before importing');
-        const merged = new Map(state.sessions.map(item => [item.id, item]));
-        for (const item of imported.sessions) {
-          if (merged.has(item.id) && JSON.stringify(merged.get(item.id)) !== JSON.stringify(item)) throw new Error(`Conflicting session ${item.id}`);
-          merged.set(item.id, item);
-        }
-        return {...state, sessions: [...merged.values()].sort((a, b) => a.createdAt - b.createdAt)};
+        const merged = mergeArchive(state, imported, {historyLimit});
+        return {...state, sessions: merged.sessions};
       });
     })
   };
