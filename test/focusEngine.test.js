@@ -23,3 +23,16 @@ test("interruptions preserve reason and timestamp", () => {
   assert.deepEqual(changed.interruptions[0], {at:12_000, reason:"notification"});
 });
 
+
+test('late pause or abandon completes at the deadline instead of losing finished work', () => {
+  for (const type of ['pause','abandon','interrupt']) {
+    const result=transition(createSession({id:'a',intention:'Study',durationMinutes:5,startedAt:0}),{type},600000);
+    assert.equal(result.status,SessionStatus.COMPLETED);
+    assert.equal(result.completedAt,300000);
+  }
+});
+test('invalid and backwards clocks fail before changing state', () => {
+  assert.throws(()=>createSession({id:'',intention:'Study',durationMinutes:5}));
+  const session=createSession({id:'a',intention:'Study',durationMinutes:5,startedAt:1000});
+  for (const now of [NaN,Infinity,0]) assert.throws(()=>transition(session,{type:'pause'},now),/clock/);
+});

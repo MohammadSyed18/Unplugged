@@ -7,7 +7,8 @@ export const SessionStatus = Object.freeze({
 });
 
 export function createSession({id, intention, durationMinutes, startedAt = Date.now()}) {
-  if (!intention?.trim()) throw new Error("an intention is required");
+  if (typeof id !== 'string' || !id.trim() || !Number.isFinite(startedAt)) throw new Error("a session ID and valid start time are required");
+  if (typeof intention !== 'string' || !intention.trim()) throw new Error("an intention is required");
   if (!Number.isInteger(durationMinutes) || durationMinutes < 5 || durationMinutes > 180) {
     throw new Error("duration must be an integer from 5 to 180 minutes");
   }
@@ -36,6 +37,12 @@ export function remainingSeconds(session, now = Date.now()) {
 }
 
 export function transition(session, event, now = Date.now()) {
+  if (!event || !["pause", "resume", "interrupt", "tick", "abandon"].includes(event.type)) throw new Error(`unknown event: ${event?.type}`);
+  if (!Number.isFinite(now) || now < session.createdAt || (session.runStartedAt !== null && now < session.runStartedAt)) throw new Error("Invalid session clock");
+  if (session.status === SessionStatus.RUNNING && remainingSeconds(session, now) === 0) {
+    return {...session, status: SessionStatus.COMPLETED, elapsedBeforeRun: session.targetSeconds,
+      runStartedAt: null, completedAt: session.runStartedAt + (session.targetSeconds - session.elapsedBeforeRun) * 1000};
+  }
   switch (event.type) {
     case "pause": {
       assertStatus(session, SessionStatus.RUNNING);

@@ -11,7 +11,7 @@ npm start
 # npm run ios / npm run android
 ```
 
-Open the Expo app on a simulator or compatible device. Enter an intention, choose a duration, and begin. Pause, resume, log distractions, or end early. Insights shows daily focus, goals, recent sessions, and completion by session length.
+Open the Expo app on a simulator or compatible device. Enter an intention, choose a duration, and begin. Pause, resume, log distractions, or end early. Insights shows daily focus, goals, recent sessions, and completion by session length. Plan lets you save tasks, set priorities, choose a time budget, and start a scheduled focus block.
 
 ## Code map
 
@@ -23,6 +23,9 @@ Open the Expo app on a simulator or compatible device. Enter an intention, choos
 | [goals.js](src/goals.js) | Daily and weekly goals, streaks, focus/break routine construction, interruption summaries |
 | [insights.js](src/insights.js) | Duration-level completion intervals, period comparisons, UTC hourly patterns, safe CSV export |
 | [analytics.js](src/analytics.js) | Weekly totals and history-based session-length suggestions |
+| [planner.js](src/planner.js) | Budget-constrained focus blocks, break allocation, deadline ordering, and session progress credit |
+| [plannerRepository.js](src/plannerRepository.js) | Serialized task persistence and idempotent reconciliation of finished sessions |
+| [PlannerScreen.js](src/PlannerScreen.js) | Saved task list, priorities, time budgets, and direct session launch |
 | [store.js](src/store.js) | AsyncStorage adapter |
 
 ## Session lifecycle
@@ -47,3 +50,9 @@ npx expo export --platform ios --output-dir dist/ios
 ```
 
 Tests cover pause/resume, app suspension, single completion, concurrent events, failed writes, malformed archives, migration, streaks, period boundaries, uncertainty intervals, and CSV formula escaping. A bundle check verifies the React Native source can compile; physical-device lifecycle and accessibility testing remain separate checks.
+
+## Daily planning
+
+Plans rank overdue tasks first, then priority and deadline. Breaks consume the available time; there is no trailing break. A short final fragment is absorbed when it fits, otherwise remaining work is shown explicitly. Starting a block uses the same durable focus-session engine as the main timer. Finishing or ending a linked session credits only whole focused minutes, capped at the task estimate. Reopening Plan reconciles saved history once per session ID, so recovery and repeated renders do not double-count work. Paused time earns no progress.
+
+Planning is local and deterministic. It neither syncs tasks to a server nor schedules device notifications. Task progress can be reconciled from retained session history; deleting a task removes its link from future planning.

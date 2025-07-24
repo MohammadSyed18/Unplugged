@@ -4,7 +4,7 @@ import {durationInsights,comparePeriods,hourlyPatterns,sessionsToCsv} from '../s
 import {createSession,transition} from '../src/focusEngine.js';
 function item(id,date,complete=true) {
   const at = Date.parse(date);
-  return transition(createSession({id,intention:'=SUM(1,2)',durationMinutes:25,startedAt:at}),{type:complete?'tick':'abandon'},at+1500000);
+  return transition(createSession({id,intention:'=SUM(1,2)',durationMinutes:25,startedAt:at}),{type:complete?'tick':'abandon'},at+(complete ? 1500000 : 900000));
 }
 test('duration evidence intervals tighten as independent sessions accumulate',()=>{
   const one=durationInsights([item('1','2026-01-01')]);

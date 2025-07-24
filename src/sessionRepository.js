@@ -13,6 +13,7 @@ export function validateSession(value) {
       !Number.isFinite(value.createdAt) || !Array.isArray(value.interruptions)) {
     throw new Error('Invalid saved session');
   }
+  if (value.taskId !== undefined && (typeof value.taskId !== 'string' || !value.taskId.trim())) throw new Error('Invalid task link');
   if (value.status === SessionStatus.COMPLETED && value.elapsedBeforeRun !== value.targetSeconds) throw new Error('Incomplete session marked completed');
   if (value.status === SessionStatus.RUNNING && (!Number.isFinite(value.runStartedAt) || value.runStartedAt < value.createdAt)) {
     throw new Error('Invalid running-session clock');
