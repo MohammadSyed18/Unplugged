@@ -1,8 +1,10 @@
 import React, {useEffect, useMemo, useState} from "react";
-import {SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View} from "react-native";
+import {AppState, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View} from "react-native";
 import {summarize, recommendDuration} from "./src/analytics.js";
-import {createSession, remainingSeconds, SessionStatus, transition} from "./src/focusEngine.js";
-import {loadSessions, saveSessions} from "./src/store.js";
+import {createSession, remainingSeconds, SessionStatus} from "./src/focusEngine.js";
+import {sessionRepository} from "./src/store.js";
+import {durationInsights, comparePeriods} from "./src/insights.js";
+import {goalProgress, buildRoutine} from "./src/goals.js";
 
 const palette = {bg:"#0c0c0b", panel:"#171714", line:"#2b2b25", text:"#f2f0e8", muted:"#9b9a8e", lime:"#d7ff64", red:"#ff806f"};
 
@@ -14,30 +16,50 @@ export default function App() {
   const [tab, setTab] = useState("focus");
   const [now, setNow] = useState(Date.now());
 
-  useEffect(() => { loadSessions().then(setSessions); }, []);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  function applyState(state) {
+    setSessions(state.sessions);
+    setActive(state.active);
+    setNow(Date.now());
+  }
+  useEffect(() => {
+    let mounted = true;
+    sessionRepository.recover().then(state => {
+      if (mounted) { applyState(state); setReady(true); }
+    }).catch(() => { if (mounted) setError('Saved sessions could not be loaded. Restart to retry.'); });
+    const listener = AppState.addEventListener('change', state => {
+      if (state === 'active') sessionRepository.recover().then(value => { if (mounted) applyState(value); }).catch(() => setError('Could not restore the timer.'));
+    });
+    return () => { mounted = false; listener.remove(); };
+  }, []);
+  async function change(operation) {
+    setBusy(true); setError('');
+    try { applyState(await operation()); }
+    catch (failure) { setError(failure.message || 'Could not save this change. Please retry.'); }
+    finally { setBusy(false); }
+  }
   useEffect(() => {
     if (active?.status !== SessionStatus.RUNNING) return undefined;
     const timer = setInterval(() => {
       const timestamp = Date.now();
       setNow(timestamp);
-      setActive(current => current ? transition(current, {type:"tick"}, timestamp) : current);
+      if (remainingSeconds(active, timestamp) === 0) {
+        sessionRepository.recover(timestamp).then(applyState).catch(() => setError('Could not save the completed session.'));
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, [active?.status]);
-  useEffect(() => {
-    if (active && [SessionStatus.COMPLETED, SessionStatus.ABANDONED].includes(active.status)) {
-      const next = [...sessions, active];
-      setSessions(next); saveSessions(next); setActive(null);
-    }
-  }, [active?.status]);
+  }, [active]);
 
   const stats = useMemo(() => summarize(sessions, now), [sessions, now]);
   const recommendation = useMemo(() => recommendDuration(sessions), [sessions]);
 
   function begin() {
-    setActive(createSession({id:`session-${Date.now()}`, intention, durationMinutes:duration}));
-    setNow(Date.now());
+    change(() => sessionRepository.start(createSession({id:`session-${Date.now()}`, intention, durationMinutes:duration})));
   }
+  const goals = useMemo(() => goalProgress(sessions, {now}), [sessions, now]);
+  const routine = useMemo(() => buildRoutine({focusMinutes: duration}), [duration]);
 
   return <SafeAreaView style={styles.safe}>
     <StatusBar barStyle="light-content" />
@@ -45,17 +67,19 @@ export default function App() {
     <View style={styles.tabs}>
       {[["focus","Focus"],["insights","Insights"]].map(([value,label]) => <TouchableOpacity key={value} onPress={()=>setTab(value)} style={[styles.tab,tab===value&&styles.tabActive]}><Text style={[styles.tabText,tab===value&&styles.tabTextActive]}>{label}</Text></TouchableOpacity>)}
     </View>
-    {tab === "focus" ? <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      {active ? <SessionCard session={active} now={now} onEvent={event=>setActive(current=>transition(current,event))} /> : <>
+    {error ? <Text accessibilityRole="alert" style={{color:palette.red,padding:16}}>{error}</Text> : null}
+    {!ready ? <Text style={{color:palette.muted,padding:22}}>Restoring your sessions…</Text> : tab === "focus" ? <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      {active ? <SessionCard session={active} now={now} onEvent={event=>{if(!busy) change(()=>sessionRepository.dispatch(event));}} /> : <>
         <Text style={styles.kicker}>START WITH INTENTION</Text>
         <Text style={styles.hero}>What deserves your full attention?</Text>
         <TextInput value={intention} onChangeText={setIntention} placeholder="Finish physics problem set" placeholderTextColor="#66665e" style={styles.input} />
         <Text style={styles.label}>FOCUS LENGTH</Text>
         <View style={styles.durations}>{[15,25,40,55].map(value=><TouchableOpacity key={value} onPress={()=>setDuration(value)} style={[styles.duration,duration===value&&styles.durationActive]}><Text style={[styles.durationText,duration===value&&styles.durationTextActive]}>{value}</Text><Text style={styles.minute}>min</Text></TouchableOpacity>)}</View>
-        <TouchableOpacity disabled={!intention.trim()} onPress={begin} style={[styles.primary,!intention.trim()&&styles.disabled]}><Text style={styles.primaryText}>Begin focus session</Text></TouchableOpacity>
+        <TouchableOpacity disabled={!intention.trim() || busy} onPress={begin} style={[styles.primary,!intention.trim()&&styles.disabled]}><Text style={styles.primaryText}>Begin focus session</Text></TouchableOpacity>
+        <Text style={{color:palette.muted,marginTop:18}}>Four-block routine: {routine.focusMinutes} focused minutes, {routine.totalMinutes} minutes including breaks.</Text>
         <View style={styles.recommendation}><Text style={styles.recNumber}>{recommendation.minutes} min</Text><View style={{flex:1}}><Text style={styles.recTitle}>Suggested next session</Text><Text style={styles.recBody}>{recommendation.reason}</Text></View></View>
       </>}
-    </ScrollView> : <Insights stats={stats} />}
+    </ScrollView> : <Insights stats={stats} goals={goals} sessions={sessions} />}
   </SafeAreaView>;
 }
 
@@ -74,13 +98,32 @@ function SessionCard({session, now, onEvent}) {
   </View>;
 }
 
-function Insights({stats}) {
+function Insights({stats, goals, sessions}) {
   const max = Math.max(1,...stats.daily.map(day=>day.minutes));
+  const durations = durationInsights(sessions);
+  const comparison = comparePeriods(sessions);
   return <ScrollView contentContainerStyle={styles.content}>
     <Text style={styles.kicker}>LAST SEVEN DAYS</Text><Text style={styles.hero}>Patterns, not pressure.</Text>
+    <View style={styles.insightCard}>
+      <Text style={styles.recTitle}>Your focus goals</Text>
+      <Text style={styles.insightLarge}>{goals.todayMinutes} / {goals.dailyMinutes} min today</Text>
+      <Text style={styles.recBody}>{goals.weekMinutes} / {goals.weeklyMinutes} min over seven days · {goals.currentStreak} day streak · Best: {goals.longestStreak}</Text>
+    </View>
     <View style={styles.statGrid}><Stat value={stats.focusedMinutes} label="focused min"/><Stat value={`${Math.round(stats.completionRate*100)}%`} label="completion"/><Stat value={stats.interruptions} label="interruptions"/></View>
     <View style={styles.chart}>{stats.daily.map(day=><View key={day.date} style={styles.barColumn}><Text style={styles.barValue}>{day.minutes}</Text><View style={[styles.bar,{height:Math.max(4,110*day.minutes/max)}]} /><Text style={styles.day}>{day.date.slice(5)}</Text></View>)}</View>
     <View style={styles.insightCard}><Text style={styles.recTitle}>Most common interruption</Text><Text style={styles.insightLarge}>{stats.topInterruption?.reason ?? "Not enough data yet"}</Text><Text style={styles.recBody}>{stats.topInterruption ? `${stats.topInterruption.count} times this week. Notice the pattern before trying to eliminate it.` : "Log distractions during a session and a pattern will appear here."}</Text></View>
+    <View style={styles.insightCard}>
+      <Text style={styles.recTitle}>Compared with the previous seven days</Text>
+      <Text style={styles.recBody}>{comparison.minuteChange >= 0 ? '+' : ''}{comparison.minuteChange} focused minutes. These are local history summaries, not targets you must beat.</Text>
+      <Text style={[styles.recTitle,{marginTop:20}]}>Focus lengths</Text>
+      {durations.map(group => <Text key={group.minutes} style={styles.recBody}>{group.minutes} min: {group.completed}/{group.attempts} completed{group.enoughHistory ? '' : ' · still gathering history'}</Text>)}
+      <Text style={[styles.recTitle,{marginTop:20}]}>Recent sessions</Text>
+      {sessions.slice(-10).reverse().map(session => <View key={session.id} style={{paddingVertical:10}}>
+        <Text style={{color:palette.text}}>{session.intention}</Text>
+        <Text style={styles.recBody}>{new Date(session.createdAt).toLocaleDateString()} · {session.status} · {Math.floor(session.elapsedBeforeRun / 60)} min</Text>
+      </View>)}
+      {!sessions.length && <Text style={styles.recBody}>Your completed and ended sessions will appear here.</Text>}
+    </View>
   </ScrollView>;
 }
 
