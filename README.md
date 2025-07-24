@@ -14,3 +14,7 @@ npm start
 ```
 
 the timer, local storage, interruption tracking, recommendations, and weekly analytics are implemented. reminders and cross-device sync are still being tested.
+
+## Implementation details
+
+Weekly analytics include elapsed time from running sessions, exclude future sessions, and use consistent UTC date buckets.
