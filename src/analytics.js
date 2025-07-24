@@ -1,10 +1,10 @@
-import {SessionStatus} from "./focusEngine.js";
+import {SessionStatus, elapsedSeconds} from "./focusEngine.js";
 
 export function summarize(sessions, now = Date.now()) {
   const sevenDaysAgo = now - 7 * 86_400_000;
-  const recent = sessions.filter(session => session.createdAt >= sevenDaysAgo);
+  const recent = sessions.filter(session => session.createdAt >= sevenDaysAgo && session.createdAt <= now);
   const completed = recent.filter(session => session.status === SessionStatus.COMPLETED);
-  const focusedSeconds = recent.reduce((total, session) => total + session.elapsedBeforeRun, 0);
+  const focusedSeconds = recent.reduce((total, session) => total + elapsedSeconds(session, now), 0);
   const interruptionCounts = new Map();
   for (const session of recent) {
     for (const interruption of session.interruptions) {
@@ -42,14 +42,14 @@ function dailyBuckets(sessions, now) {
     const dayEnd = dayStart + 86_400_000;
     const minutes = sessions
       .filter(session => session.createdAt >= dayStart && session.createdAt < dayEnd)
-      .reduce((total, session) => total + session.elapsedBeforeRun / 60, 0);
+      .reduce((total, session) => total + elapsedSeconds(session, now) / 60, 0);
     return {date: new Date(dayStart).toISOString().slice(0, 10), minutes: Math.round(minutes)};
   });
 }
 
 function startOfDay(timestamp) {
   const date = new Date(timestamp);
-  date.setHours(0, 0, 0, 0);
+  date.setUTCHours(0, 0, 0, 0);
   return date.valueOf();
 }
 
