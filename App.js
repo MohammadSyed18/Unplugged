@@ -1,8 +1,8 @@
 import React, {useEffect, useMemo, useState} from "react";
 import {SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View} from "react-native";
 import {summarize, recommendDuration} from "./src/analytics.js";
-import {createSession, remainingSeconds, SessionStatus, transition} from "./src/focusEngine.js";
-import {loadSessions, saveSessions} from "./src/store.js";
+import {createSession, recoverSession, remainingSeconds, SessionStatus, transition} from "./src/focusEngine.js";
+import {loadActiveSession, loadSessions, saveActiveSession, saveSessions} from "./src/store.js";
 
 const palette = {bg:"#0c0c0b", panel:"#171714", line:"#2b2b25", text:"#f2f0e8", muted:"#9b9a8e", lime:"#d7ff64", red:"#ff806f"};
 
@@ -13,8 +13,16 @@ export default function App() {
   const [duration, setDuration] = useState(25);
   const [tab, setTab] = useState("focus");
   const [now, setNow] = useState(Date.now());
+  const [hydrated, setHydrated] = useState(false);
 
-  useEffect(() => { loadSessions().then(setSessions); }, []);
+  useEffect(() => {
+    Promise.all([loadSessions(), loadActiveSession()]).then(([stored, checkpoint]) => {
+      setSessions(stored);
+      setActive(recoverSession(checkpoint));
+      setHydrated(true);
+    });
+  }, []);
+  useEffect(() => { if (hydrated) saveActiveSession(active); }, [active, hydrated]);
   useEffect(() => {
     if (active?.status !== SessionStatus.RUNNING) return undefined;
     const timer = setInterval(() => {
@@ -27,7 +35,7 @@ export default function App() {
   useEffect(() => {
     if (active && [SessionStatus.COMPLETED, SessionStatus.ABANDONED].includes(active.status)) {
       const next = [...sessions, active];
-      setSessions(next); saveSessions(next); setActive(null);
+      setSessions(next); saveSessions(next); saveActiveSession(null); setActive(null);
     }
   }, [active?.status]);
 
@@ -90,4 +98,3 @@ function formatTime(seconds){return `${String(Math.floor(seconds/60)).padStart(2
 const styles = StyleSheet.create({
   safe:{flex:1,backgroundColor:palette.bg},header:{paddingHorizontal:22,paddingTop:14,paddingBottom:12,flexDirection:"row",justifyContent:"space-between",alignItems:"center"},brand:{color:palette.text,fontSize:22,fontWeight:"900",letterSpacing:-1},streak:{color:palette.muted,fontSize:12},tabs:{flexDirection:"row",marginHorizontal:22,borderBottomWidth:1,borderBottomColor:palette.line},tab:{paddingVertical:12,marginRight:24},tabActive:{borderBottomWidth:2,borderBottomColor:palette.lime},tabText:{color:palette.muted,fontWeight:"700"},tabTextActive:{color:palette.text},content:{padding:22,paddingBottom:60},kicker:{color:palette.lime,fontSize:11,fontWeight:"900",letterSpacing:1.5,marginTop:20,marginBottom:12},hero:{color:palette.text,fontSize:44,lineHeight:46,fontWeight:"900",letterSpacing:-2.2,maxWidth:330},input:{backgroundColor:palette.panel,borderWidth:1,borderColor:palette.line,borderRadius:16,padding:18,color:palette.text,fontSize:17,marginTop:28},label:{color:palette.muted,fontSize:11,fontWeight:"800",letterSpacing:1.3,marginTop:26,marginBottom:10},durations:{flexDirection:"row",gap:8},duration:{flex:1,backgroundColor:palette.panel,borderWidth:1,borderColor:palette.line,borderRadius:14,paddingVertical:14,alignItems:"center"},durationActive:{backgroundColor:palette.lime,borderColor:palette.lime},durationText:{color:palette.text,fontSize:21,fontWeight:"900"},durationTextActive:{color:palette.bg},minute:{color:palette.muted,fontSize:10},primary:{backgroundColor:palette.lime,borderRadius:15,padding:18,alignItems:"center",marginTop:22},primaryText:{color:palette.bg,fontWeight:"900",fontSize:16},disabled:{opacity:.35},recommendation:{flexDirection:"row",gap:16,backgroundColor:palette.panel,borderRadius:16,padding:18,marginTop:24,borderWidth:1,borderColor:palette.line},recNumber:{color:palette.lime,fontWeight:"900",fontSize:20},recTitle:{color:palette.text,fontWeight:"800",marginBottom:5},recBody:{color:palette.muted,lineHeight:19,fontSize:13},sessionTitle:{color:palette.text,fontWeight:"900",fontSize:38,lineHeight:41,letterSpacing:-1.6},timerWrap:{marginVertical:60},timer:{color:palette.text,fontSize:78,fontWeight:"200",textAlign:"center",fontVariant:["tabular-nums"]},track:{height:5,backgroundColor:palette.line,borderRadius:4,overflow:"hidden",marginTop:24},fill:{height:"100%",backgroundColor:palette.lime},row:{flexDirection:"row",gap:10},secondary:{flex:1,borderRadius:14,borderWidth:1,borderColor:palette.line,padding:16,alignItems:"center"},secondaryText:{color:palette.text,fontWeight:"800"},end:{padding:16,alignItems:"center",marginTop:10},endText:{color:palette.red,fontWeight:"700"},interruptions:{color:palette.muted,textAlign:"center",marginTop:20},statGrid:{flexDirection:"row",gap:8,marginTop:28},stat:{flex:1,backgroundColor:palette.panel,borderRadius:14,padding:14,borderWidth:1,borderColor:palette.line},statValue:{color:palette.text,fontSize:24,fontWeight:"900"},statLabel:{color:palette.muted,fontSize:11,marginTop:3},chart:{height:170,flexDirection:"row",alignItems:"flex-end",justifyContent:"space-between",marginTop:34,borderBottomWidth:1,borderBottomColor:palette.line,paddingHorizontal:4},barColumn:{alignItems:"center",width:38},bar:{width:22,backgroundColor:palette.lime,borderTopLeftRadius:5,borderTopRightRadius:5},barValue:{color:palette.muted,fontSize:9,marginBottom:5},day:{color:palette.muted,fontSize:9,marginTop:7,marginBottom:-20},insightCard:{backgroundColor:palette.panel,borderRadius:16,padding:20,marginTop:50,borderWidth:1,borderColor:palette.line},insightLarge:{color:palette.lime,fontSize:26,fontWeight:"900",marginVertical:10}
 });
-

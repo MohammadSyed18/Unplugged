@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "unplugged:sessions:v1";
+const ACTIVE_KEY = "unplugged:active:v1";
 
 export async function loadSessions() {
   const raw = await AsyncStorage.getItem(KEY);
@@ -19,3 +20,13 @@ export async function saveSessions(sessions) {
   return trimmed;
 }
 
+export async function loadActiveSession() {
+  const raw = await AsyncStorage.getItem(ACTIVE_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+export async function saveActiveSession(session) {
+  if (session) await AsyncStorage.setItem(ACTIVE_KEY, JSON.stringify(session));
+  else await AsyncStorage.removeItem(ACTIVE_KEY);
+}

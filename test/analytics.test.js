@@ -25,3 +25,10 @@ test("recommendation contracts after abandoned sessions", () => {
   assert.equal(recommendDuration(sessions).minutes,20);
 });
 
+test("recommendation contracts when interruptions are frequent", () => {
+  const sessions = [session(SessionStatus.COMPLETED,25,"phone"),session(SessionStatus.COMPLETED,25,"phone"),session(SessionStatus.COMPLETED,25,"phone")];
+  sessions.forEach(value => value.interruptions.push({reason:"noise",at:now}));
+  const result = recommendDuration(sessions);
+  assert.equal(result.minutes,20);
+  assert.match(result.reason,/interruptions/);
+});

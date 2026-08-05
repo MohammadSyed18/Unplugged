@@ -63,7 +63,12 @@ export function transition(session, event, now = Date.now()) {
   }
 }
 
+export function recoverSession(session, now = Date.now()) {
+  if (!session || !Object.values(SessionStatus).includes(session.status)) return null;
+  if (session.status !== SessionStatus.RUNNING) return session;
+  return transition(session, {type: "tick"}, now);
+}
+
 function assertStatus(session, expected) {
   if (session.status !== expected) throw new Error(`expected ${expected}, got ${session.status}`);
 }
-

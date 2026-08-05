@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createSession, elapsedSeconds, remainingSeconds, SessionStatus, transition} from "../src/focusEngine.js";
+import {createSession, elapsedSeconds, recoverSession, remainingSeconds, SessionStatus, transition} from "../src/focusEngine.js";
 
 test("timer survives pauses without counting paused time", () => {
   const session = createSession({id:"1", intention:"Study", durationMinutes:5, startedAt:1_000});
@@ -23,3 +23,9 @@ test("interruptions preserve reason and timestamp", () => {
   assert.deepEqual(changed.interruptions[0], {at:12_000, reason:"notification"});
 });
 
+test("a running checkpoint completes while the app is suspended", () => {
+  const session = createSession({id:"1", intention:"Study", durationMinutes:5, startedAt:0});
+  const recovered = recoverSession(session, 360_000);
+  assert.equal(recovered.status, SessionStatus.COMPLETED);
+  assert.equal(recovered.elapsedBeforeRun, 300);
+});
